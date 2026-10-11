@@ -1,0 +1,856 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Torn Market Scout</title>
+<meta name="description" content="Find underpriced Item Market listings in Torn and track what you hold. Runs entirely in your browser.">
+<meta name="color-scheme" content="dark"><meta name="theme-color" content="#120b09">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23120b09'/%3E%3Cpath d='M16 4l9 9-3.5 15h-11L7 13z' fill='%230d0605' stroke='%23ff9f1c' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M16 4l-1.4 10 4 7-2.6 7' fill='none' stroke='%23ff9f1c' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#120b09; --surface:#1c1210; --raise:#2a1b17; --ink:#f3e6d8; --ink2:#c9b5a3; --mute:#9a8574; --line:#3f2b22;
+  --cash:#ff9f1c; --cash-bg:#4a2a0a; --on-cash:#fff3e0; --hero-val:#ffd37a;
+  --sodium:#dccb92; --sodium-bg:#3a3217; --brick:#ff6b57; --brick-bg:#4a1d17; --focus:#ffd37a;
+  --f-num:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-head:"Cinzel",Georgia,serif;
+  --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.45 var(--f-body);padding-bottom:env(safe-area-inset-bottom)}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:4px}
+h1,h2,h3,p{margin:0}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums lining-nums;letter-spacing:.01em}
+
+/* progress */
+.progress{position:fixed;inset:0 0 auto 0;height:3px;z-index:30;background:transparent}
+.progress i{display:block;height:100%;width:0;background:var(--cash);transition:width .25s ease}
+
+/* header */
+.top{position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:1px solid var(--line)}
+.top-in{max-width:1180px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px}
+.brand{display:flex;align-items:center;gap:10px;font:700 24px/1 var(--f-num);letter-spacing:.01em;flex:1}
+.brand svg{width:30px;height:30px;color:var(--cash)}
+.icon-btn{width:42px;height:42px;display:grid;place-items:center;border:1px solid var(--line);background:var(--raise);border-radius:8px;cursor:pointer}
+.icon-btn:hover{border-color:var(--ink2)}
+.icon-btn svg{width:20px;height:20px}
+
+/* layout */
+.layout{max-width:1180px;margin:0 auto;padding:16px;display:grid;grid-template-columns:minmax(0,1fr) 370px;gap:20px;align-items:start}
+.aside{position:sticky;top:76px}
+@media (max-width:980px){
+  .layout{grid-template-columns:minmax(0,1fr);padding-bottom:84px}
+  .aside{position:static}
+  body[data-view="board"] .aside{display:none}
+  body[data-view="watch"] .board{display:none}
+}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:42px;padding:0 16px;border-radius:8px;border:1px solid var(--line);background:var(--raise);font-weight:600;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--ink2)}
+.btn:active{transform:translateY(1px)}
+.btn.pri{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn.pri:hover{opacity:.9}
+.btn.sm{min-height:34px;padding:0 12px;font-size:14px}
+.btn.danger{color:var(--brick)}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.btn[hidden]{display:none}
+
+/* controls */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.controls{padding:14px}
+.ctl-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.stats{display:flex;flex-wrap:wrap;gap:6px 22px;margin-top:12px;color:var(--ink2);font-size:15px}
+.stats b{font:600 22px/1 var(--f-num);color:var(--ink);margin-right:5px;font-variant-numeric:tabular-nums}
+#status{margin-top:8px;min-height:22px;color:var(--ink2);font-size:14px}
+#status.err{color:var(--brick)}
+.opts{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin-top:10px}
+.sel{height:38px;border:1px solid var(--line);background:var(--raise);border-radius:8px;padding:0 10px}
+.check{display:inline-flex;align-items:center;gap:8px;font-size:14px;color:var(--ink2);cursor:pointer}
+.check input{width:18px;height:18px;accent-color:var(--cash)}
+
+/* hero */
+.hero{margin-top:14px;background:linear-gradient(135deg,#7d1a07 0%,#c2410c 55%,#e8590c 100%);color:var(--on-cash);border-radius:10px;padding:20px 20px 16px;
+  --line:color-mix(in srgb,var(--on-cash) 35%,transparent);--ink:var(--on-cash);--cash-bg:color-mix(in srgb,var(--on-cash) 24%,transparent);
+  --mute:color-mix(in srgb,var(--on-cash) 72%,transparent);--sodium:var(--hero-val)}
+.hero-top{display:flex;flex-wrap:wrap;gap:8px 24px;align-items:flex-end;justify-content:space-between}
+.hero h2{font:700 34px/1.05 var(--f-num);letter-spacing:.005em}
+.hero .sub{margin-top:6px;opacity:.9;font-size:15px}
+.hero .big{font:700 clamp(56px,11vw,92px)/.9 var(--f-num);font-variant-numeric:tabular-nums;letter-spacing:-.005em}
+.hero .big-note{text-align:right;font-size:14px;opacity:.9;margin-top:4px}
+.hero .ruler-wrap{margin-top:18px}
+.hero .hero-actions{margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:14px}
+.hero .btn{background:transparent;border-color:color-mix(in srgb,var(--on-cash) 55%,transparent);color:var(--on-cash)}
+.hero .btn:hover{border-color:var(--on-cash)}
+
+/* ruler */
+.ruler{position:relative;height:30px}
+.ruler .track{position:absolute;left:0;right:0;top:14px;height:2px;background:var(--line);border-radius:1px}
+.ruler .zone{position:absolute;top:9px;height:12px;background:var(--cash-bg);border:1px solid var(--cash);border-radius:3px}
+.ruler .zone.neg{background:var(--brick-bg);border-color:var(--brick)}
+.ruler .m{position:absolute;top:3px;height:24px;width:2px;margin-left:-1px;border-radius:1px}
+.ruler .m.buy{width:6px;margin-left:-3px;background:var(--ink)}
+.ruler .m.val{background:var(--sodium);width:3px;margin-left:-1.5px}
+.ruler .m.next{background:var(--mute)}
+.legend{display:flex;flex-wrap:wrap;gap:2px 16px;font-size:13px;color:var(--mute)}
+.hero .legend{color:var(--mute)}
+.legend span::before{content:"";display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px;background:var(--mute);vertical-align:0}
+.legend .l-buy::before{background:var(--ink)}
+.legend .l-val::before{background:var(--sodium)}
+.legend .l-sell::before{background:var(--cash-bg);outline:1px solid var(--cash)}
+.legend b{font-weight:600;color:var(--ink)}
+.hero .legend b{color:var(--on-cash)}
+
+/* rows */
+.list{margin-top:14px;display:grid;gap:10px}
+.row{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1.25fr) auto;gap:10px 22px;align-items:center;
+  background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--cash);border-radius:10px;padding:14px 16px}
+.row.gap{border-left-color:var(--sodium)}
+.row.none{border-left-color:var(--line)}
+.row h3{font:600 22px/1.1 var(--f-num);letter-spacing:.005em}
+.row h3 small{font:400 14px var(--f-body);color:var(--mute);margin-left:6px;letter-spacing:0}
+.plan{margin-top:4px;color:var(--ink2);font-size:15px}
+.flags{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px;font-size:13px;color:var(--mute)}
+.flags .warn{color:var(--brick);font-weight:500}
+.flags .good{color:var(--cash);font-weight:500}
+.flags .hot{color:var(--sodium);font-weight:500}
+.r-num{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.r-num .big{font:700 32px/1 var(--f-num);color:var(--cash)}
+.r-num .small{font-size:13px;color:var(--ink2)}
+.r-num .btn{margin-top:6px}
+@media (max-width:720px){
+  .row{grid-template-columns:minmax(0,1fr) auto}
+  .row .r-ruler{grid-column:1 / -1;order:3}
+  .hero{padding:16px}
+  .hero .big-note{text-align:left}
+}
+
+/* empty / onboarding */
+.empty{margin-top:14px;padding:22px}
+.empty h2{font:700 28px/1.1 var(--f-num)}
+.empty p{margin-top:8px;color:var(--ink2);max-width:60ch}
+.steps{margin:16px 0 0;padding:0;list-style:none;display:grid;gap:12px;counter-reset:s}
+.steps li{display:grid;grid-template-columns:34px 1fr;gap:12px;align-items:start;counter-increment:s}
+.steps li::before{content:counter(s);display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:var(--ink);color:var(--bg);font:700 18px var(--f-num)}
+.steps b{font-weight:600}
+.steps a{color:var(--cash);font-weight:600}
+.empty .ctl-row{margin-top:16px}
+
+/* watchlist */
+.watch-h{padding:14px 14px 12px}
+.watch-h h2{font:700 24px/1 var(--f-num);display:flex;align-items:baseline;gap:8px}
+.watch-h h2 span{font:500 15px var(--f-body);color:var(--mute)}
+.add{display:flex;gap:8px;margin-top:12px}
+.add input{flex:1;min-width:0;height:42px;border:1px solid var(--line);background:var(--raise);border-radius:8px;padding:0 12px}
+.switch{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;font-size:14px;color:var(--ink2)}
+.switch input{appearance:none;width:44px;height:26px;border-radius:13px;background:var(--line);position:relative;cursor:pointer;transition:background .15s;flex:none}
+.switch input::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--raise);box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .15s}
+.switch input:checked{background:var(--cash)}
+.switch input:checked::after{transform:translateX(18px)}
+.wlist{margin-top:10px;display:grid;gap:8px}
+.w{background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--line);border-radius:10px;padding:12px 14px}
+.w.buy{border-left-color:var(--cash)} .w.sell{border-left-color:var(--sodium)}
+.w-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.w h3{font:600 20px/1.15 var(--f-num)}
+.w .meta{font-size:13px;color:var(--mute);margin-top:2px}
+.w .line{font-size:14px;color:var(--ink2);margin-top:6px}
+.sig{display:inline-block;margin-top:8px;margin-right:6px;padding:3px 10px;border-radius:99px;font-size:13px;font-weight:600}
+.sig.buy{background:var(--cash-bg);color:var(--cash)} .sig.sell{background:var(--sodium-bg);color:var(--sodium)}
+.mini{width:34px;height:34px;display:grid;place-items:center;border:1px solid var(--line);background:var(--raise);border-radius:8px;cursor:pointer}
+.mini svg{width:16px;height:16px}
+.mini:hover{border-color:var(--ink2)}
+.w-empty{padding:16px;color:var(--ink2);font-size:15px}
+
+/* bottom tab bar (mobile) */
+.tabbar{display:none}
+@media (max-width:980px){
+  .tabbar{display:grid;grid-template-columns:1fr 1fr;position:fixed;left:0;right:0;bottom:0;z-index:25;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+  .tabbar button{height:56px;border:0;background:transparent;font-weight:600;color:var(--mute);cursor:pointer;position:relative}
+  .tabbar button[aria-selected="true"]{color:var(--ink)}
+  .tabbar button[aria-selected="true"]::before{content:"";position:absolute;top:0;left:22%;right:22%;height:3px;background:var(--cash);border-radius:0 0 3px 3px}
+  .tabbar .cnt{display:inline-block;min-width:22px;padding:0 6px;margin-left:6px;border-radius:11px;background:var(--line);color:var(--ink);font-size:13px;line-height:22px}
+}
+
+/* dialogs */
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);padding:0;width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 24px);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+dialog::backdrop{background:rgba(8,12,16,.55)}
+.dlg-h{display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface)}
+.dlg-h h2{font:700 24px/1 var(--f-num)}
+.dlg-b{padding:6px 18px 18px}
+.dlg-b h3{font:700 18px/1 var(--f-num);margin:20px 0 8px;letter-spacing:.01em}
+.fld{display:block;margin-top:10px}
+.fld span{display:block;font-size:14px;color:var(--ink2);margin-bottom:4px}
+.fld input{width:100%;height:42px;border:1px solid var(--line);background:var(--raise);border-radius:8px;padding:0 12px}
+.fld small{display:block;color:var(--mute);margin-top:4px;font-size:13px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chip{border:1px solid var(--line);background:var(--raise);border-radius:99px;padding:5px 12px;font-size:14px;cursor:pointer;color:var(--ink2)}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.dlg-f{display:flex;gap:8px;justify-content:flex-end;padding:14px 18px;border-top:1px solid var(--line);flex-wrap:wrap}
+.keyrow{display:flex;gap:8px}
+.keyrow input{flex:1}
+.fine{margin:26px 0 8px;padding:12px 14px;border-radius:8px;background:var(--bg);color:var(--ink2);font-size:13px}
+a{color:var(--cash)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* volcanic theme */
+body{position:relative}
+body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+   radial-gradient(900px 420px at 50% 108%,rgba(217,72,15,.30),transparent 70%),
+   url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 260' preserveAspectRatio='none'%3E%3Cpath d='M0 260V190l60-40 30 50 60-80 50 90 70-40 60 60 70-90 50 60 70-40 70 65 70-95 60 75 70-30 70 55 70-80 60 60 70-45 60 55 70-40V260z' fill='%230a0504'/%3E%3Cpath d='M0 215l60-30 30 38 60-62 50 74 70-28 60 48 70-72 50 48 70-28 70 52 70-76 60 58 70-22 70 42 70-62 60 46 70-32 60 40 70-28' fill='none' stroke='%23e8590c' stroke-opacity='.55' stroke-width='2'/%3E%3C/svg%3E") bottom center/100% 260px no-repeat}
+.top,.layout,.tabbar{position:relative;z-index:1}
+.top{position:sticky;z-index:20;box-shadow:0 1px 0 rgba(255,122,24,.28)}
+.tabbar{position:fixed;z-index:25}
+.brand,.hero h2,.empty h2,.watch-h h2,.dlg-h h2{font-family:var(--f-head);letter-spacing:.02em}
+.brand{font-size:20px}
+.hero h2{font-size:28px;line-height:1.1}
+.empty h2{font-size:24px;line-height:1.15}
+.watch-h h2{font-size:20px}
+.dlg-h h2{font-size:20px}
+.dlg-b h3{font-family:var(--f-head);font-size:15px;letter-spacing:.03em}
+.empty-art{float:right;width:min(210px,38%);height:auto;margin:0 0 8px 16px}
+.hero{box-shadow:0 0 0 1px rgba(255,159,28,.35),0 10px 40px rgba(217,72,15,.25)}
+.row,.w,.panel{box-shadow:inset 0 1px 0 rgba(255,200,150,.05)}
+dialog{z-index:40}
+</style>
+</head>
+<body data-view="board">
+<div class="progress" aria-hidden="true"><i id="prog"></i></div>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M16 2l10 10-4 18H10L6 12z" fill="#0d0605" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M16 2l-1.5 12 4.5 8-3 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Torn Market Scout
+    </div>
+    <button class="icon-btn" id="openSettings" aria-label="Open settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="board" aria-label="Opportunities">
+    <div class="panel controls">
+      <div class="ctl-row">
+        <button class="btn pri" id="scan">Scan next batch</button>
+        <button class="btn" id="stop" hidden>Stop</button>
+        <button class="btn" id="restart">Start over</button>
+      </div>
+      <div class="stats">
+        <span><b id="sScanned">0</b>of <span id="sTotal">0</span> items scanned</span>
+        <span><b id="sOpp">0</b>opportunities</span>
+      </div>
+      <div class="opts">
+        <label class="check">Sort by
+          <select id="sort" class="sel">
+            <option value="total">Total profit</option>
+            <option value="roi">Return on cost</option>
+            <option value="unit">Profit per item</option>
+            <option value="disc">Discount to value</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="showAll"> Show items with no margin</label>
+      </div>
+      <div id="status" role="status" aria-live="polite"></div>
+    </div>
+    <div id="hero"></div>
+    <div id="results" class="list"></div>
+  </section>
+
+  <aside class="aside" aria-label="Watchlist">
+    <div class="panel watch-h">
+      <h2>Watchlist <span id="wCount"></span></h2>
+      <div class="add">
+        <input id="addName" list="itemNames" placeholder="Item name" autocomplete="off" aria-label="Item to add">
+        <button class="btn" id="addBtn">Add</button>
+      </div>
+      <datalist id="itemNames"></datalist>
+      <div class="ctl-row" style="margin-top:12px">
+        <button class="btn sm pri" id="refreshWatch">Refresh prices</button>
+      </div>
+      <label class="switch">Refresh every 2 minutes and sound an alert on new signals <input type="checkbox" id="auto"></label>
+    </div>
+    <div id="watch" class="wlist"></div>
+  </aside>
+</main>
+
+<nav class="tabbar" role="tablist" aria-label="Views">
+  <button role="tab" id="tabBoard" aria-selected="true">Opportunities</button>
+  <button role="tab" id="tabWatch" aria-selected="false">Watchlist<span class="cnt" id="tabCnt">0</span></button>
+</nav>
+
+<dialog id="settings" aria-labelledby="sTitle">
+  <div class="dlg-h"><h2 id="sTitle">Settings</h2><button class="btn sm" id="closeSettings">Done</button></div>
+  <div class="dlg-b">
+    <h3>Torn API key</h3>
+    <label class="fld"><span>Your key</span>
+      <div class="keyrow"><input id="key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your key"><button class="btn sm" id="showKey" type="button" aria-pressed="false">Show</button></div>
+      <small>Saved only in this browser. It is sent only to api.torn.com. <a href="https://www.torn.com/preferences.php#tab=api" target="_blank" rel="noopener">Create a key in Torn</a></small>
+    </label>
+    <div class="ctl-row" style="margin-top:12px"><button class="btn sm" id="testConn">Test connection</button><button class="btn sm" id="loadItems">Load item list</button></div>
+    <p id="connOut" class="fine" style="margin:12px 0 0" role="status" hidden></p>
+
+    <h3>Profit rules</h3>
+    <div class="two">
+      <label class="fld"><span>Market fee (%)</span><input id="fee" type="number" step="0.5" min="0" value="5"></label>
+      <label class="fld"><span>Cash to spend ($)</span><input id="budget" type="number" min="0" value="10000000"></label>
+      <label class="fld"><span>Minimum profit per item ($)</span><input id="minProfit" type="number" min="0" value="5000"></label>
+      <label class="fld"><span>Minimum return (%)</span><input id="minROI" type="number" step="0.5" min="0" value="3"></label>
+    </div>
+
+    <h3>What to scan</h3>
+    <div class="two">
+      <label class="fld"><span>Lowest item value ($)</span><input id="minMV" type="number" min="0" value="20000"></label>
+      <label class="fld"><span>Highest item value ($)</span><input id="maxMV" type="number" min="0" value="20000000"></label>
+      <label class="fld"><span>Items per batch</span><input id="batch" type="number" min="1" max="100" value="40"><small>Torn allows about 100 requests a minute.</small></label>
+      <label class="fld"><span>Sell alert at return (%)</span><input id="sellROI" type="number" step="0.5" min="0" value="5"><small>For watchlist items you hold.</small></label>
+    </div>
+    <span class="fld"><span>Item types (none selected scans all)</span></span>
+    <div class="chips" id="types"><span style="color:var(--mute);font-size:14px">Load the item list to choose types.</span></div>
+
+    <div class="fine">Estimates use live listings and Torn's average price, and assume you can sell at the target price. Thin markets, price moves and other buyers can erase a margin.</div>
+    <button class="btn danger sm" id="erase">Erase saved data</button>
+  </div>
+</dialog>
+
+<dialog id="editDlg" aria-labelledby="eName">
+  <form method="dialog">
+    <div class="dlg-h"><h2 id="eName">Item</h2></div>
+    <div class="dlg-b">
+      <label class="fld"><span>How many you hold</span><input id="eQty" type="number" min="0" inputmode="numeric" placeholder="0"></label>
+      <label class="fld"><span>What you paid per item ($)</span><input id="eCost" type="number" min="0" inputmode="numeric" placeholder="Leave empty if unknown"><small>Needed for sell alerts.</small></label>
+      <label class="fld"><span>Alert me to buy at or below ($)</span><input id="eBuy" type="number" min="0" inputmode="numeric" placeholder="Leave empty for no alert"></label>
+    </div>
+    <div class="dlg-f">
+      <button class="btn danger" value="remove" formnovalidate>Remove</button>
+      <button class="btn" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn pri" value="save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+(function(){
+'use strict';
+const $ = id => document.getElementById(id);
+const LS = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+const fmt = n => (n < 0 ? '-$' : '$') + Math.round(Math.abs(n)).toLocaleString();
+const fmtC = n => {
+  const a = Math.abs(n), s = n < 0 ? '-' : '';
+  const t = x => x.toFixed(2).replace(/\.?0+$/, '');
+  if(a >= 1e9) return s + '$' + t(a / 1e9) + 'B';
+  if(a >= 1e6) return s + '$' + t(a / 1e6) + 'M';
+  if(a >= 1e4) return s + '$' + Math.round(a / 1e3) + 'k';
+  return fmt(n);
+};
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+function ago(t){
+  const m = Math.floor((Date.now() - t) / 60000);
+  return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : Math.floor(m / 60) + ' h ago';
+}
+
+const state = {
+  items: [], byId: new Map(), byName: new Map(),
+  cfg: LS.get('tms_cfg', {}), cfgNow: null,
+  types: new Set(LS.get('tms_types', [])),
+  watch: LS.get('tms_watch', []),
+  hist: LS.get('tms_hist', {}),
+  latest: {}, results: new Map(),
+  cursor: 0, running: false, stopFlag: false, showAll: false,
+  autoTimer: null, lastAlert: new Set(), heroId: null, lastError: false
+};
+
+// ---------- config ----------
+const cfgFields = ['fee','minProfit','minROI','budget','minMV','maxMV','batch','sellROI'];
+function readCfg(){
+  const c = {};
+  cfgFields.forEach(f => { c[f] = parseFloat($(f).value) || 0; });
+  c.fee = Math.max(0, c.fee);
+  state.cfgNow = c; state.cfg = c; LS.set('tms_cfg', c);
+  return c;
+}
+function initCfg(){
+  cfgFields.forEach(f => {
+    if(state.cfg[f] !== undefined) $(f).value = state.cfg[f];
+    $(f).addEventListener('change', () => { readCfg(); state.cursor = 0; render(); renderWatch(); });
+  });
+  $('key').value = LS.get('tms_key', '');
+  $('key').addEventListener('change', () => LS.set('tms_key', $('key').value.trim()));
+  readCfg();
+}
+
+// ---------- API ----------
+let lastCall = 0;
+async function api(path, params){
+  const key = $('key').value.trim();
+  if(!key){ openSettings(); throw new Error('Add your Torn API key in Settings first.'); }
+  const wait = 650 - (Date.now() - lastCall);
+  if(wait > 0) await sleep(wait);
+  for(let attempt = 0; attempt < 3; attempt++){
+    lastCall = Date.now();
+    const q = new URLSearchParams(Object.assign({}, params || {}, { key, comment: 'MarketScout' }));
+    let data;
+    try{
+      const res = await fetch('https://api.torn.com/v2' + path + '?' + q.toString());
+      data = await res.json();
+    }catch(e){ throw new Error('Could not reach Torn. Open Settings and press Test connection to see why.'); }
+    if(data && data.error){
+      const code = data.error.code;
+      if(code === 5 || code === 8){ setStatus('Torn asked us to slow down. Waiting 20 seconds…'); await sleep(20000); continue; }
+      if(code === 2) throw new Error('Torn rejected that API key. Check it in Settings.');
+      throw new Error('Torn API error ' + code + ': ' + data.error.error);
+    }
+    return data;
+  }
+  throw new Error('Torn kept rate limiting the requests. Wait a minute and try again.');
+}
+
+// ---------- items ----------
+async function loadItems(force){
+  const cache = LS.get('tms_items', null);
+  if(!force && cache && Date.now() - cache.t < 6 * 3600e3 && cache.items.length){
+    state.items = cache.items; indexItems(); return;
+  }
+  setStatus('Loading the item list…');
+  const data = await api('/torn/items');
+  let raw = data.items;
+  if(!raw) throw new Error('Unexpected response from Torn. Keys received: ' + Object.keys(data).join(', '));
+  if(!Array.isArray(raw)) raw = Object.entries(raw).map(([id, v]) => Object.assign({ id: +id }, v));
+  const items = [];
+  for(const it of raw){
+    const v = it.value || {};
+    const mv = +(v.market_price ?? v.market_value ?? it.market_value ?? it.market_price ?? 0);
+    if(!mv || it.is_tradable === false) continue;
+    items.push({ id: +it.id, name: it.name, type: it.type || 'Other', mv });
+  }
+  if(!items.length) throw new Error('Torn returned no priced items.');
+  state.items = items;
+  LS.set('tms_items', { t: Date.now(), items });
+  indexItems();
+  setStatus('Loaded ' + items.length + ' tradable items.');
+}
+function indexItems(){
+  state.byId = new Map(state.items.map(i => [i.id, i]));
+  state.byName = new Map(state.items.map(i => [i.name.toLowerCase(), i]));
+  $('itemNames').innerHTML = state.items.map(i => '<option value="' + esc(i.name) + '"></option>').join('');
+  const types = [...new Set(state.items.map(i => i.type))].sort();
+  $('types').innerHTML = '';
+  types.forEach(t => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip'; b.textContent = t;
+    b.setAttribute('aria-pressed', state.types.has(t));
+    b.onclick = () => {
+      state.types.has(t) ? state.types.delete(t) : state.types.add(t);
+      b.setAttribute('aria-pressed', state.types.has(t));
+      LS.set('tms_types', [...state.types]); state.cursor = 0; render();
+    };
+    $('types').appendChild(b);
+  });
+}
+function candidates(){
+  const c = state.cfgNow || readCfg();
+  return state.items
+    .filter(i => i.mv >= c.minMV && (!c.maxMV || i.mv <= c.maxMV) && (!state.types.size || state.types.has(i.type)))
+    .sort((a, b) => b.mv - a.mv);
+}
+
+// ---------- analysis ----------
+function median(a){ const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
+function recordHist(id, price){
+  const h = state.hist[id] || (state.hist[id] = []);
+  const last = h[h.length - 1];
+  if(last && Date.now() - last.t < 5 * 60e3){ last.p = price; return; }
+  h.push({ t: Date.now(), p: price });
+  if(h.length > 150) h.shift();
+}
+function analyse(it, rawListings, avg){
+  const c = state.cfgNow || readCfg();
+  const fee = c.fee / 100;
+  const ls = (rawListings || []).map(l => ({ p: +l.price, a: +(l.amount || 1) })).filter(l => l.p > 0).sort((a, b) => a.p - b.p);
+  const r = { id: it.id, name: it.name, type: it.type, mv: it.mv, t: Date.now() };
+  if(!ls.length){ r.empty = true; return r; }
+  const ref = avg || it.mv;
+  r.ref = ref; r.n = ls.length; r.l0 = ls[0]; r.l1 = ls.find(l => l.p > ls[0].p) || null;
+  r.depthQty = ls.reduce((s, l) => s + l.a, 0);
+  r.disc = (1 - ls[0].p / ref) * 100;
+  const prior = (state.hist[it.id] || []).map(x => x.p);
+  r.histMed = prior.length >= 5 ? median(prior) : null;
+  r.vsHist = r.histMed ? (ls[0].p / r.histMed - 1) * 100 : null;
+  recordHist(it.id, ls[0].p);
+
+  const tNet = ref * (1 - fee);
+  let aProfit = 0, aCost = 0, aQty = 0;
+  for(const l of ls){
+    const net = tNet - l.p;
+    if(net >= c.minProfit && net / l.p * 100 >= c.minROI){
+      const q = Math.min(l.a, Math.floor((c.budget - aCost) / l.p));
+      if(q <= 0) break;
+      aProfit += net * q; aCost += l.p * q; aQty += q;
+    } else break;
+  }
+  let bProfit = 0, bUnit = 0, bQty = 0, bSell = 0;
+  if(r.l1){
+    bSell = Math.min(r.l1.p - 1, ref * 1.05);
+    bUnit = bSell * (1 - fee) - ls[0].p;
+    if(bUnit >= c.minProfit && bUnit / ls[0].p * 100 >= c.minROI){
+      bQty = Math.min(ls[0].a, Math.floor(c.budget / ls[0].p));
+      bProfit = bUnit * bQty;
+    } else bUnit = 0;
+  }
+  if(aProfit <= 0 && bProfit <= 0){ r.qualifies = false; return r; }
+  r.qualifies = true;
+  if(aProfit >= bProfit){
+    r.play = 'below'; r.total = aProfit; r.cost = aCost; r.qty = aQty;
+    r.sell = ref; r.unit = aProfit / aQty; r.roi = aProfit / aCost * 100;
+  } else {
+    r.play = 'gap'; r.total = bProfit; r.qty = bQty; r.cost = ls[0].p * bQty;
+    r.sell = bSell; r.unit = bUnit; r.roi = bUnit / ls[0].p * 100;
+  }
+  return r;
+}
+async function scanOne(it){
+  const data = await api('/market/' + it.id + '/itemmarket');
+  const im = data.itemmarket || data;
+  const avg = im.item && im.item.average_price ? +im.item.average_price : 0;
+  const r = analyse(it, im.listings, avg);
+  state.latest[it.id] = r;
+  return r;
+}
+
+// ---------- status & busy ----------
+function setStatus(t, err){ const s = $('status'); s.textContent = t; s.classList.toggle('err', !!err); }
+function setProg(f){ $('prog').style.width = Math.round(f * 100) + '%'; }
+function busy(b){
+  state.running = b;
+  ['scan','restart','refreshWatch','loadItems'].forEach(i => $(i).disabled = b);
+  $('stop').hidden = !b;
+  if(!b) setTimeout(() => setProg(0), 400);
+}
+
+// ---------- scanning ----------
+async function scanBatch(){
+  if(!state.items.length) await loadItems();
+  const c = readCfg();
+  const list = candidates();
+  if(!list.length){ setStatus('No items match your value and type filters. Adjust them in Settings.', true); render(); return; }
+  if(state.cursor >= list.length){ setStatus('You have scanned all ' + list.length + ' matching items. Press Start over to scan again.'); return; }
+  const slice = list.slice(state.cursor, state.cursor + Math.max(1, c.batch));
+  busy(true); state.stopFlag = false;
+  let done = 0, errs = 0, lastErr = '';
+  for(const it of slice){
+    if(state.stopFlag) break;
+    setStatus('Scanning ' + it.name + ' (' + (done + 1) + ' of ' + slice.length + ')…');
+    try{ const r = await scanOne(it); state.results.set(it.id, r); }
+    catch(e){
+      errs++; lastErr = e.message;
+      if(/key|API error|reach Torn|rate limiting/i.test(e.message) || errs > 4) break;
+    }
+    done++; setProg(done / slice.length);
+    if(done % 5 === 0) render();
+  }
+  state.cursor += done;
+  LS.set('tms_hist', state.hist);
+  busy(false); render(); renderWatch();
+  const q = [...state.results.values()].filter(r => r.qualifies).length;
+  if(lastErr && errs > 0 && done < slice.length) setStatus(lastErr, true);
+  else setStatus('Scanned ' + done + ' items. ' + q + ' clear your rules so far.' + (errs ? ' ' + errs + ' could not be read.' : ''));
+}
+
+// ---------- ruler ----------
+function ruler(r){
+  const target = r.qualifies ? r.sell : r.ref;
+  const pts = [r.l0.p, r.ref, target]; if(r.l1) pts.push(r.l1.p);
+  const lo = Math.min(...pts), hi = Math.max(...pts);
+  const pad = (hi - lo) * 0.14 || hi * 0.05;
+  const a = lo - pad, b = hi + pad;
+  const pos = x => ((x - a) / (b - a) * 100).toFixed(2);
+  const z1 = Math.min(r.l0.p, target), z2 = Math.max(r.l0.p, target);
+  return '<div class="ruler-wrap"><div class="ruler" aria-hidden="true"><div class="track"></div>' +
+    '<div class="zone' + (target >= r.l0.p ? '' : ' neg') + '" style="left:' + pos(z1) + '%;width:' + (pos(z2) - pos(z1)).toFixed(2) + '%"></div>' +
+    (r.l1 ? '<div class="m next" style="left:' + pos(r.l1.p) + '%"></div>' : '') +
+    '<div class="m val" style="left:' + pos(r.ref) + '%"></div>' +
+    '<div class="m buy" style="left:' + pos(r.l0.p) + '%"></div></div>' +
+    '<div class="legend"><span class="l-buy">Cheapest <b>' + fmt(r.l0.p) + '</b></span>' +
+    '<span class="l-val">Value <b>' + fmt(r.ref) + '</b></span>' +
+    (r.l1 ? '<span>Next listing <b>' + fmt(r.l1.p) + '</b></span>' : '') +
+    (r.qualifies ? '<span class="l-sell">Sell near <b>' + fmt(r.sell) + '</b></span>' : '') + '</div></div>';
+}
+function flags(r){
+  const f = [];
+  if(r.n < 3) f.push('<span class="warn">Thin market, only ' + r.n + ' listing' + (r.n === 1 ? '' : 's') + '</span>');
+  if(r.vsHist !== null && r.vsHist <= -5) f.push('<span class="good">' + Math.abs(r.vsHist).toFixed(0) + '% below its usual price</span>');
+  if(r.vsHist !== null && r.vsHist >= 5) f.push('<span class="hot">' + r.vsHist.toFixed(0) + '% above its usual price</span>');
+  f.push('<span>' + r.depthQty + ' for sale</span>');
+  const old = Date.now() - r.t > 10 * 60e3;
+  f.push('<span' + (old ? ' class="warn"' : '') + '>Checked ' + ago(r.t) + (old ? ', rescan before buying' : '') + '</span>');
+  return '<div class="flags">' + f.join('') + '</div>';
+}
+const playName = r => r.play === 'gap' ? 'Gap flip' : 'Priced below value';
+
+// ---------- rendering ----------
+function countUp(el, to){
+  if(reduced){ el.textContent = '+' + fmtC(to); return; }
+  const t0 = performance.now(), d = 700;
+  const step = t => {
+    const k = Math.min(1, (t - t0) / d), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = '+' + fmtC(to * e);
+    if(k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+function renderHero(r){
+  const el = $('hero');
+  if(!r){ el.innerHTML = ''; state.heroId = null; return; }
+  const isNew = state.heroId !== r.id;
+  state.heroId = r.id;
+  el.innerHTML = '<section class="hero" aria-label="Best opportunity"><div class="hero-top"><div>' +
+    '<h2>' + esc(r.name) + '</h2>' +
+    '<p class="sub">' + playName(r) + '. Buy ' + r.qty + ' at about ' + fmt(r.l0.p) + ' and sell near ' + fmt(r.sell) + '.</p></div>' +
+    '<div><div class="big num" id="heroBig">+' + fmtC(r.total) + '</div>' +
+    '<p class="big-note">' + fmt(r.unit) + ' per item after fees, ' + r.roi.toFixed(1) + '% return on ' + fmt(r.cost) + '</p></div></div>' +
+    ruler(r) +
+    '<div class="hero-actions"><button class="btn sm" data-watch="' + r.id + '">Add to watchlist</button>' +
+    '<span>Checked ' + ago(r.t) + '</span></div></section>';
+  if(isNew) countUp($('heroBig'), r.total);
+}
+function rowHtml(r){
+  const q = r.qualifies;
+  return '<article class="row ' + (q ? (r.play === 'gap' ? 'gap' : '') : 'none') + '">' +
+    '<div class="r-main"><h3>' + esc(r.name) + '<small>' + esc(r.type) + '</small></h3>' +
+    '<p class="plan">' + (q ? playName(r) + '. Buy ' + r.qty + ' at about ' + fmt(r.l0.p) : 'No margin after fees at your current rules') + '</p>' + flags(r) + '</div>' +
+    '<div class="r-ruler">' + ruler(r) + '</div>' +
+    '<div class="r-num">' + (q
+      ? '<span class="big num">+' + fmtC(r.total) + '</span><span class="small">' + fmt(r.unit) + ' each, ' + r.roi.toFixed(1) + '% return</span>'
+      : '<span class="small">' + (r.disc > 0 ? r.disc.toFixed(1) + '% under value' : Math.abs(r.disc).toFixed(1) + '% over value') + '</span>') +
+    '<button class="btn sm" data-watch="' + r.id + '">Watch</button></div></article>';
+}
+function emptyBoard(){
+  const hasKey = !!$('key').value.trim();
+  if(!hasKey){
+    return '<section class="panel empty"><svg class="empty-art" viewBox="0 0 220 150" aria-hidden="true"><defs><radialGradient id="gl" cx="50%" cy="100%" r="70%"><stop offset="0" stop-color="#e8590c" stop-opacity=".75"/><stop offset="1" stop-color="#e8590c" stop-opacity="0"/></radialGradient></defs><ellipse cx="110" cy="146" rx="108" ry="46" fill="url(#gl)"/><path d="M20 146l22-58 18 22 14-70 26 106z" fill="#0d0605" stroke="#c2410c" stroke-width="2" stroke-linejoin="round"/><path d="M74 146l30-124 30 80 18-34 30 78z" fill="#140a07" stroke="#ff9f1c" stroke-width="2" stroke-linejoin="round"/><path d="M104 22l-6 52 14 24-8 48" fill="none" stroke="#ffd37a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M60 110l8 14-6 22" fill="none" stroke="#ff9f1c" stroke-width="1.6" stroke-linecap="round"/><path d="M0 146h220" stroke="#e8590c" stroke-width="2"/></svg><h2>Find underpriced listings in minutes</h2>' +
+      '<p>Scout checks live Item Market listings against Torn\'s average prices and shows where the margin is, after fees.</p>' +
+      '<ol class="steps"><li><div><b>Create an API key.</b> In Torn, open <a href="https://www.torn.com/preferences.php#tab=api" target="_blank" rel="noopener">Settings, API Keys</a> and make a new key. A public-access key is enough.</div></li>' +
+      '<li><div><b>Paste it into Settings.</b> It stays in this browser and goes only to Torn.</div></li>' +
+      '<li><div><b>Press Scan next batch.</b> Results appear here as each item is checked.</div></li></ol>' +
+      '<div class="ctl-row"><button class="btn pri" data-open="settings">Open settings</button></div></section>';
+  }
+  if(!state.results.size){
+    return '<section class="panel empty"><h2>Ready to scan</h2>' +
+      '<p>Scan checks the most valuable items first, ' + (state.cfgNow ? state.cfgNow.batch : 40) + ' at a time. Narrow what it checks under Settings, What to scan.</p></section>';
+  }
+  return '<section class="panel empty"><h2>Nothing clears your rules yet</h2>' +
+    '<p>Scan the next batch, lower the minimum profit or return, or turn on Show items with no margin to see how close they are.</p></section>';
+}
+function render(){
+  const all = [...state.results.values()];
+  const q = all.filter(r => r.qualifies).length;
+  $('sScanned').textContent = state.cursor;
+  $('sTotal').textContent = candidates().length;
+  $('sOpp').textContent = q;
+  const rows = all.filter(r => !r.empty && (state.showAll || r.qualifies));
+  const key = { total: r => r.total || 0, roi: r => r.roi || 0, unit: r => r.unit || 0, disc: r => r.disc }[$('sort').value];
+  rows.sort((a, b) => key(b) - key(a));
+  const top = rows.find(r => r.qualifies);
+  renderHero(top || null);
+  const rest = rows.filter(r => r !== top).slice(0, 60);
+  if(!rows.length){ $('results').innerHTML = emptyBoard(); }
+  else $('results').innerHTML = rest.map(rowHtml).join('');
+  bindActions();
+}
+function bindActions(){
+  document.querySelectorAll('[data-watch]').forEach(b => b.onclick = () => addWatch(+b.dataset.watch));
+  document.querySelectorAll('[data-open="settings"]').forEach(b => b.onclick = openSettings);
+}
+
+// ---------- watchlist ----------
+const icoEdit = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z"/></svg>';
+function saveWatch(){ LS.set('tms_watch', state.watch); }
+function addWatch(id){
+  if(state.watch.some(w => w.id === id)) { setStatus('That item is already on your watchlist.'); return; }
+  const it = state.byId.get(id); if(!it) return;
+  state.watch.push({ id, name: it.name, qty: 0, cost: 0, buyBelow: 0 });
+  saveWatch(); renderWatch(); setStatus(it.name + ' added to your watchlist.');
+}
+function watchSignals(w, r){
+  const c = state.cfgNow || readCfg(); const fee = c.fee / 100;
+  const out = { buy: false, sell: false, sellWhy: '', unit: 0 };
+  if(!r || r.empty) return out;
+  if(w.buyBelow > 0 && r.l0.p <= w.buyBelow) out.buy = true;
+  if(w.qty > 0){
+    out.unit = (r.l0.p - 1) * (1 - fee) - w.cost;
+    const hot = r.l0.p >= r.ref * 1.03;
+    const roiHit = w.cost > 0 && out.unit / w.cost * 100 >= c.sellROI;
+    if(hot || roiHit){ out.sell = true; out.sellWhy = hot ? 'Priced above value' : 'Return target reached'; }
+  }
+  return out;
+}
+function renderWatch(){
+  $('wCount').textContent = state.watch.length ? state.watch.length + ' item' + (state.watch.length === 1 ? '' : 's') : '';
+  $('tabCnt').textContent = state.watch.length;
+  if(!state.watch.length){
+    $('watch').innerHTML = '<div class="panel w-empty">Add items you own or want to buy. Enter what you paid to get sell alerts, or a buy-below price to get buy alerts.</div>';
+    return;
+  }
+  $('watch').innerHTML = state.watch.map((w, i) => {
+    const r = state.latest[w.id], s = watchSignals(w, r);
+    let body = '<p class="line">Not checked yet. Press Refresh prices.</p>';
+    if(r && r.empty) body = '<p class="line">No one is selling this right now.</p>';
+    else if(r){
+      body = '<p class="line">Cheapest <b class="num">' + fmt(r.l0.p) + '</b> (value ' + fmt(r.ref) + ')</p>';
+      if(w.qty > 0) body += '<p class="line">Listing at ' + fmt(r.l0.p - 1) + ' nets ' + fmt(s.unit) + ' each' + (w.cost ? ', ' + (s.unit / w.cost * 100).toFixed(1) + '% on cost' : '') + '. All ' + w.qty + ': ' + fmt(s.unit * w.qty) + '.</p>';
+      if(r.vsHist !== null) body += '<p class="line">' + (r.vsHist > 0 ? '+' : '') + r.vsHist.toFixed(1) + '% vs its usual price of ' + fmt(r.histMed) + '</p>';
+      if(s.buy) body += '<span class="sig buy">Buy now, at or below ' + fmt(w.buyBelow) + '</span>';
+      if(s.sell) body += '<span class="sig sell">Sell now. ' + s.sellWhy + '</span>';
+    }
+    const meta = [];
+    if(w.qty) meta.push(w.qty + ' held');
+    if(w.cost) meta.push('paid ' + fmt(w.cost));
+    if(w.buyBelow) meta.push('buy under ' + fmt(w.buyBelow));
+    return '<div class="w ' + (s.buy ? 'buy' : s.sell ? 'sell' : '') + '"><div class="w-top"><div><h3>' + esc(w.name) + '</h3>' +
+      (meta.length ? '<div class="meta">' + meta.join(', ') + '</div>' : '') + '</div>' +
+      '<button class="mini" data-edit="' + i + '" aria-label="Edit ' + esc(w.name) + '">' + icoEdit + '</button></div>' + body +
+      (r && !r.empty ? '<p class="meta" style="margin-top:6px">Checked ' + ago(r.t) + '</p>' : '') + '</div>';
+  }).join('');
+  document.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openEdit(+b.dataset.edit));
+}
+let editIdx = -1;
+function openEdit(i){
+  editIdx = i; const w = state.watch[i]; const d = $('editDlg');
+  $('eName').textContent = w.name;
+  $('eQty').value = w.qty || ''; $('eCost').value = w.cost || ''; $('eBuy').value = w.buyBelow || '';
+  d.returnValue = ''; d.showModal();
+}
+function signalSet(){
+  const s = new Set();
+  state.watch.forEach(w => { const g = watchSignals(w, state.latest[w.id]); if(g.buy) s.add('b' + w.id); if(g.sell) s.add('s' + w.id); });
+  return s;
+}
+function beep(){
+  try{
+    const a = new (window.AudioContext || window.webkitAudioContext)();
+    const o = a.createOscillator(), g = a.createGain();
+    o.connect(g); g.connect(a.destination); o.frequency.value = 880; g.gain.value = 0.15;
+    o.start(); o.stop(a.currentTime + 0.25);
+  }catch(e){}
+}
+async function refreshWatch(){
+  if(!state.items.length) await loadItems();
+  if(!state.watch.length){ setStatus('Your watchlist is empty. Add an item first.'); return; }
+  busy(true); state.stopFlag = false;
+  let done = 0, failed = '';
+  for(const w of state.watch){
+    if(state.stopFlag) break;
+    const it = state.byId.get(w.id); if(!it) continue;
+    setStatus('Checking ' + it.name + '…');
+    try{ await scanOne(it); }catch(e){ failed = e.message; break; }
+    done++; setProg(done / state.watch.length);
+  }
+  LS.set('tms_hist', state.hist);
+  busy(false); renderWatch();
+  const sig = signalSet();
+  const fresh = [...sig].filter(x => !state.lastAlert.has(x));
+  if(fresh.length){ beep(); document.title = '(' + fresh.length + ') New signal, Torn Market Scout'; }
+  state.lastAlert = sig;
+  if(failed) setStatus(failed, true);
+  else setStatus('Watchlist refreshed. ' + sig.size + ' active signal' + (sig.size === 1 ? '' : 's') + '.');
+}
+function toggleAuto(){
+  if($('auto').checked){
+    state.autoTimer = setInterval(() => { if(!state.running) refreshWatch().catch(e => setStatus(e.message, true)); }, 120000);
+    beep();
+  } else { clearInterval(state.autoTimer); state.autoTimer = null; }
+}
+
+// ---------- dialogs & views ----------
+function openSettings(){ const d = $('settings'); if(!d.open) d.showModal(); }
+function setView(v){
+  document.body.dataset.view = v;
+  $('tabBoard').setAttribute('aria-selected', v === 'board');
+  $('tabWatch').setAttribute('aria-selected', v === 'watch');
+  window.scrollTo({ top: 0 });
+}
+function guard(fn){ return async () => { try{ await fn(); }catch(e){ busy(false); setStatus(e.message, true); render(); } }; }
+
+// ---------- wiring ----------
+initCfg();
+$('openSettings').onclick = openSettings;
+$('closeSettings').onclick = () => { LS.set('tms_key', $('key').value.trim()); readCfg(); $('settings').close(); render(); };
+$('settings').addEventListener('close', () => { LS.set('tms_key', $('key').value.trim()); render(); });
+$('showKey').onclick = () => {
+  const k = $('key'), on = k.type === 'password';
+  k.type = on ? 'text' : 'password'; $('showKey').textContent = on ? 'Hide' : 'Show'; $('showKey').setAttribute('aria-pressed', on);
+};
+$('testConn').onclick = async () => {
+  const out = $('connOut'), key = $('key').value.trim();
+  out.hidden = false;
+  if(!key){ out.textContent = 'Paste your API key above first.'; return; }
+  LS.set('tms_key', key);
+  out.textContent = 'Testing…';
+  let res;
+  try{
+    res = await fetch('https://api.torn.com/v2/user/basic?key=' + encodeURIComponent(key) + '&comment=MarketScout');
+  }catch(e){
+    const where = location.protocol === 'file:' ? 'a file on your device' : location.origin;
+    out.textContent = 'The browser could not send the request to Torn (page opened from ' + where + '). Common causes: the page is open inside a chat or app preview, so open it in Safari or Chrome instead; an ad blocker or privacy extension is blocking api.torn.com, so try a private window; or you are offline. If none of these apply, Torn may be down or refusing browser requests.';
+    return;
+  }
+  let data = null;
+  try{ data = await res.json(); }catch(e){}
+  if(data && data.error) out.textContent = 'Torn answered but rejected the request: error ' + data.error.code + ', ' + data.error.error + '. ' + (data.error.code === 2 ? 'Check the key for typos, or create a new one.' : '');
+  else if(data && (data.profile || data.name)) out.textContent = 'Connected as ' + ((data.profile && data.profile.name) || data.name) + '. Press Load item list next.';
+  else out.textContent = 'Torn replied (status ' + res.status + ') but the response was not what we expected. Press Load item list to try anyway.';
+};
+$('loadItems').onclick = guard(async () => { LS.set('tms_key', $('key').value.trim()); await loadItems(true); render(); });
+$('scan').onclick = guard(async () => { LS.set('tms_key', $('key').value.trim()); await scanBatch(); });
+$('restart').onclick = () => { state.cursor = 0; state.results.clear(); state.heroId = null; render(); setStatus('Cleared. Press Scan next batch to begin again.'); };
+$('stop').onclick = () => { state.stopFlag = true; };
+$('sort').onchange = render;
+$('showAll').onchange = () => { state.showAll = $('showAll').checked; render(); };
+$('addBtn').onclick = () => {
+  const it = state.byName.get($('addName').value.trim().toLowerCase());
+  if(!it){ setStatus(state.items.length ? 'No item with that name. Pick one from the suggestions.' : 'Load the item list in Settings first.', true); return; }
+  addWatch(it.id); $('addName').value = '';
+};
+$('addName').addEventListener('keydown', e => { if(e.key === 'Enter') $('addBtn').click(); });
+$('refreshWatch').onclick = guard(refreshWatch);
+$('auto').onchange = toggleAuto;
+$('tabBoard').onclick = () => setView('board');
+$('tabWatch').onclick = () => setView('watch');
+$('editDlg').addEventListener('close', () => {
+  const v = $('editDlg').returnValue, w = state.watch[editIdx];
+  if(!w) return;
+  if(v === 'save'){
+    w.qty = Math.max(0, parseInt($('eQty').value) || 0);
+    w.cost = Math.max(0, parseFloat($('eCost').value) || 0);
+    w.buyBelow = Math.max(0, parseFloat($('eBuy').value) || 0);
+  } else if(v === 'remove'){ state.watch.splice(editIdx, 1); }
+  saveWatch(); renderWatch();
+});
+$('erase').onclick = () => {
+  if(!confirm('Erase your saved key, settings, watchlist and price history from this browser?')) return;
+  Object.keys(localStorage).filter(k => k.indexOf('tms_') === 0).forEach(k => localStorage.removeItem(k));
+  location.reload();
+};
+document.addEventListener('visibilitychange', () => { if(!document.hidden) document.title = 'Torn Market Scout'; });
+
+const cached = LS.get('tms_items', null);
+if(cached && cached.items && cached.items.length){ state.items = cached.items; indexItems(); }
+render(); renderWatch();
+if(!$('key').value.trim()) setStatus('Add your API key to get started.');
+window.__scout = { state, analyse, render, ruler }; // exposed for debugging in the console
+})();
+</script>
+</body>
+</html>
